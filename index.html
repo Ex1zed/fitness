@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Фитнес">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Фитнес</title>
+<style>
+/* Цвета: светлая тема по умолчанию, тёмная — по системным настройкам */
+:root{--bg:#eef0f3;--card:#fff;--tx:#15181d;--mu:#6b7380;--ac:#2f5bea;--ln:#dde1e7;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b1f27;--tx:#eceef2;--mu:#98a0ad;--ac:#7da2ff;--ln:#2a303b}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,system-ui,"Segoe UI",sans-serif}
+main{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 14px calc(env(safe-area-inset-bottom,0px) + 90px)}
+h1{font-size:28px;margin:6px 0 12px;letter-spacing:-.02em}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px}
+.mu{color:var(--mu);font-size:14px}
+.big{font-size:38px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0}
+input,select{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--ln);border-radius:10px;padding:10px;width:100%;min-width:0}
+button{font:inherit;color:#fff;background:var(--ac);border:0;border-radius:10px;padding:10px 14px;margin:2px}
+button.pri{width:100%;padding:14px;font-weight:600}
+.set{display:grid;grid-template-columns:22px 1fr 1fr 1fr;gap:6px;align-items:center;margin-top:6px}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;background:none;color:var(--mu);border-radius:0;margin:0;padding:14px 4px}
+nav button.on{color:var(--ac);font-weight:700}
+label{display:block;margin:10px 0 4px}
+</style></head><body><main id="v"></main>
+<nav><button data-t="today">Сегодня</button><button data-t="train">Тренировка</button><button data-t="prog">Прогресс</button><button data-t="prof">Профиль</button></nav>
+<script>
+/* ---------- Данные (хранятся на устройстве в localStorage) ---------- */
+const K='fit1';
+const $=s=>document.querySelector(s);
+const T=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10); // локальная дата
+let S=JSON.parse(localStorage.getItem(K)||'null')||{p:{age:18,h:196,w:98,sex:'m',act:1.375,def:20,goal:88},ws:[],ss:[]};
+// p — профиль, ws — замеры веса [{d,w}], ss — тренировки [{d,t,ex:{название:[{w,r,q}]}}]
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert('Не удалось сохранить данные. Сделай экспорт в профиле.')}};
+const num=x=>parseFloat(String(x).replace(',','.'));
+const curW=()=>S.ws.length?S.ws[S.ws.length-1].w:S.p.w;
+
+/* ---------- Расчёт калорий и БЖУ (Mifflin-St Jeor) ---------- */
+function calc(){
+  const p=S.p,w=curW();
+  const bmr=10*w+6.25*p.h-5*p.age+(p.sex==='m'?5:-161);
+  const tdee=Math.round(bmr*p.act);
+  const kcal=Math.round(tdee*(1-p.def/100));
+  const pr=Math.round(1.8*w), f=Math.round(.8*w);          // белок 1,8 г/кг, жиры 0,8 г/кг
+  const c=Math.max(0,Math.round((kcal-pr*4-f*9)/4));       // остальное — углеводы
+  return {tdee,kcal,p:pr,f,c};
+}
+
+/* ---------- Программа: фуллбади A/B, 3 тренировки в неделю, 12 недель ---------- */
+// [упражнение, подходов, диапазон повторов, отдых в секундах]
+const P={
+ A:[['Присед со штангой',3,'6-10',150],['Жим штанги лёжа',3,'6-10',150],['Тяга штанги в наклоне',3,'8-12',120],['Жим гантелей сидя',2,'8-12',90],['Румынская тяга',2,'8-12',120],['Планка (секунды)',3,'40-60',60]],
+ B:[['Становая тяга',3,'5-8',180],['Жим гантелей на наклонной',3,'8-12',120],['Тяга верхнего блока',3,'8-12',90],['Выпады с гантелями',2,'10-12',90],['Разведение гантелей в стороны',2,'12-15',60],['Скручивания',3,'12-15',60]]
+};
+const wkNum=()=>Math.min(12,Math.floor(S.ss.length/3)+1);             // неделя программы
+const nextType=()=>S.ss.length%2?'B':'A';                              // A,B,A / B,A,B ...
+const phase=w=>w<=4?'адаптация, RPE 6–7':w<12?'прогрессия, RPE 7–9':'разгрузка: 2 подхода, вес полегче';
+const e1rm=(w,r)=>Math.round(w*(1+r/30));                              // формула Эпли
+function last(n){for(let i=S.ss.length-1;i>=0;i--)if(S.ss[i].ex[n])return S.ss[i].ex[n];return null}
+function hint(n,rg){
+  const l=last(n);
+  if(!l)return 'Первый раз: начни с лёгкого веса (RPE 6–7).';
+  const top=+rg.split('-')[1],b=l.reduce((a,x)=>x.w>a.w?x:a,l[0]);
+  const up=l.every(x=>x.r>=top)&&b.w>0;
+  return 'Прошлый раз: '+l.map(x=>x.w+'×'+x.r).join(', ')+(b.w>0?' (1ПМ ≈ '+e1rm(b.w,b.r)+' кг)':'')+'. '+
+    (up?'Все подходы на верхней границе — добавь 2,5 кг.':'Цель: довести все подходы до '+top+' повторов.');
+}
+
+/* ---------- Экраны ---------- */
+function vToday(){
+  const c=calc(),wk=wkNum();
+  return `<h1>Сегодня</h1>
+  <div class=card><div class=mu>Цель на день</div><div class=big>${c.kcal} ккал</div>
+  <div class=row><span>Белки ${c.p} г</span><span>Жиры ${c.f} г</span><span>Углеводы ${c.c} г</span></div>
+  <div class=mu>Расход около ${c.tdee} ккал, дефицит ${S.p.def}%</div></div>
+  <div class=card><div class=mu>Вес сегодня, кг</div><div class=row><input id=wi inputmode=decimal placeholder="${curW()}"><button onclick="addW()">Сохранить</button></div></div>
+  <div class=card><div class=mu>Неделя ${wk} из 12, ${phase(wk)}</div><div class=big>Тренировка ${nextType()}</div><button onclick="tab('train')">Открыть</button></div>`;
+}
+function addW(){
+  const w=num($('#wi').value);
+  if(!(w>=40&&w<=250))return alert('Введи вес от 40 до 250 кг');
+  S.ws=S.ws.filter(x=>x.d!==T());S.ws.push({d:T(),w});S.ws.sort((a,b)=>a.d<b.d?-1:1);
+  save();tab('today');
+}
+function vTrain(){
+  const t=nextType(),wk=wkNum();
+  let h=`<h1>Тренировка ${t}</h1><div class=mu>Неделя ${wk}: ${phase(wk)}</div>
+  <div class=card>Таймер отдыха <button onclick="rest(60)">60</button><button onclick="rest(90)">90</button><button onclick="rest(120)">120</button><button onclick="rest(180)">180</button> <b id=tt></b></div>`;
+  P[t].forEach((e,i)=>{
+    const n=wk===12?Math.min(e[1],2):e[1],l=last(e[0]);
+    h+=`<div class=card data-i=${i}><b>${e[0]}</b><div class=mu>${n}×${e[2]}, отдых ${e[3]} с</div><div class=mu>${hint(e[0],e[2])}</div>`;
+    for(let s=0;s<n;s++)h+=`<div class=set><span class=mu>${s+1}</span><input inputmode=decimal placeholder="кг" value="${l&&l[s]&&l[s].w?l[s].w:''}"><input inputmode=numeric placeholder="повторы"><input inputmode=decimal placeholder="RPE"></div>`;
+    h+='</div>';
+  });
+  return h+'<button class=pri onclick="finish()">Завершить тренировку</button>'+hist();
+}
+function finish(){
+  const t=nextType(),ex={};
+  document.querySelectorAll('[data-i]').forEach(c=>{
+    const sets=[];
+    c.querySelectorAll('.set').forEach(r=>{
+      const [w,rp,q]=[...r.querySelectorAll('input')].map(x=>num(x.value));
+      if(rp>0)sets.push({w:w||0,r:rp,q:q||null});   // сохраняем только подходы с повторами
+    });
+    if(sets.length)ex[P[t][c.dataset.i][0]]=sets;
+  });
+  if(!Object.keys(ex).length)return alert('Заполни повторы хотя бы в одном подходе');
+  S.ss.push({d:T(),t,ex});save();tab('train');
+}
+function hist(){
+  if(!S.ss.length)return '';
+  return '<h1 style="font-size:20px;margin-top:20px">Последние тренировки</h1>'+S.ss.slice(-5).reverse().map(s=>{
+    const vol=Object.values(s.ex).flat().reduce((a,x)=>a+x.w*x.r,0);
+    return `<div class=card><div class=row><b>${s.d}, тренировка ${s.t}</b><span class=mu>объём ${Math.round(vol)} кг</span></div></div>`}).join('');
+}
+let tmr;
+function rest(s){  // таймер отдыха
+  clearInterval(tmr);let n=s;const el=$('#tt');
+  const f=()=>{el.textContent=Math.floor(n/60)+':'+String(n%60).padStart(2,'0');if(n--<=0){clearInterval(tmr);el.textContent='Пора работать';navigator.vibrate&&navigator.vibrate(300)}};
+  f();tmr=setInterval(f,1000);
+}
+function chart(){
+  const a=S.ws;
+  if(a.length<2)return '<div class=mu>Добавь хотя бы два замера веса на вкладке «Сегодня».</div>';
+  const v=a.map(x=>x.w),mn=Math.min(...v,S.p.goal)-1,mx=Math.max(...v)+1,W=320,H=150;
+  const X=i=>10+i*(W-20)/(a.length-1),Y=x=>H-10-(x-mn)/(mx-mn)*(H-20);
+  const ma=a.map((_,i)=>{const s=a.slice(Math.max(0,i-6),i+1);return s.reduce((p,x)=>p+x.w,0)/s.length});
+  const pl=arr=>arr.map((x,i)=>X(i)+','+Y(x)).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="10" x2="310" y1="${Y(S.p.goal)}" y2="${Y(S.p.goal)}" stroke="var(--mu)" stroke-dasharray="4"/><polyline points="${pl(v)}" fill="none" stroke="var(--mu)" stroke-width="1.5"/><polyline points="${pl(ma)}" fill="none" stroke="var(--ac)" stroke-width="3"/></svg>
+  <div class=mu>Тонкая линия — замеры, толстая — среднее за 7 записей, пунктир — цель ${S.p.goal} кг</div>`;
+}
+function rate(){  // темп: среднее за последние 7 дней против предыдущих 7
+  const n=Date.now(),d=x=>(n-new Date(x.d))/864e5;
+  const a=S.ws.filter(x=>d(x)<=7),b=S.ws.filter(x=>d(x)>7&&d(x)<=14);
+  if(!a.length||!b.length)return 'Для оценки темпа нужны замеры за две недели.';
+  const m=z=>z.reduce((p,x)=>p+x.w,0)/z.length,r=m(a)-m(b);
+  return `Темп за неделю: ${r.toFixed(2)} кг. `+(r>-0.3?'Медленнее цели: можно убавить калории примерно на 150 ккал.':r<-1?'Слишком быстро: добавь около 150 ккал, чтобы не терять мышцы.':'Темп в норме, ничего менять не нужно.');
+}
+function rm(){
+  const o={};
+  S.ss.forEach(s=>Object.entries(s.ex).forEach(([n,a])=>a.forEach(x=>{if(x.w>0){const v=e1rm(x.w,x.r);if(!o[n]||v>o[n])o[n]=v}})));
+  return Object.entries(o).map(([n,v])=>`<div class=row><span>${n}</span><b>${v} кг</b></div>`).join('')||'<div class=mu>Появится после первой тренировки с весом.</div>';
+}
+function vProg(){
+  const left=Math.max(0,curW()-S.p.goal).toFixed(1);
+  return `<h1>Прогресс</h1><div class=card><div class=mu>Сейчас ${curW()} кг, до цели ${left} кг</div>${chart()}<p>${rate()}</p></div>
+  <div class=card><b>Расчётный 1ПМ</b>${rm()}</div>`;
+}
+function vProf(){
+  const p=S.p,o=(v,t)=>`<option value="${v}" ${p.act==v?'selected':''}>${t}</option>`;
+  return `<h1>Профиль</h1><div class=card>
+  <label>Возраст</label><input id=a inputmode=numeric value="${p.age}">
+  <label>Рост, см</label><input id=h inputmode=numeric value="${p.h}">
+  <label>Пол</label><select id=s><option value=m ${p.sex==='m'?'selected':''}>Мужской</option><option value=f ${p.sex==='f'?'selected':''}>Женский</option></select>
+  <label>Активность</label><select id=ac>${o(1.2,'Сидячая, без тренировок')}${o(1.375,'Сидячая и 3 тренировки')}${o(1.55,'Активная')}</select>
+  <label>Дефицит калорий, %</label><input id=df inputmode=numeric value="${p.def}">
+  <label>Цель по весу, кг</label><input id=g inputmode=decimal value="${p.goal}">
+  <p><button class=pri onclick="saveP()">Сохранить</button></p></div>
+  <div class=card><b>Резервная копия</b><p class=mu>Данные лежат только на этом устройстве. Делай экспорт раз в неделю и при переносе на другое устройство.</p>
+  <button onclick="exp()">Экспорт</button><button onclick="$('#f').click()">Импорт</button><input id=f type=file accept=".json" hidden onchange="imp(this)"></div>`;
+}
+function saveP(){
+  const p={age:num($('#a').value),h:num($('#h').value),sex:$('#s').value,act:num($('#ac').value),def:num($('#df').value),goal:num($('#g').value),w:S.p.w};
+  if(!(p.age>=14&&p.h>=120&&p.def>=0&&p.def<=25&&p.goal>=40))return alert('Проверь значения. Дефицит — не больше 25%.');
+  S.p=p;save();tab('today');
+}
+function exp(){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));
+  a.download='fitness-'+T()+'.json';a.click();
+}
+function imp(i){
+  const r=new FileReader();
+  r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.p||!d.ws||!d.ss)throw 0;S=d;save();tab('today')}catch(e){alert('Файл не подходит')}};
+  r.readAsText(i.files[0]);
+}
+
+/* ---------- Навигация ---------- */
+const V={today:vToday,train:vTrain,prog:vProg,prof:vProf};
+function tab(n){
+  clearInterval(tmr);
+  $('#v').innerHTML=V[n]();scrollTo(0,0);
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===n));
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));
+tab('today');
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();  // просим не удалять данные
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+</script></body></html>
