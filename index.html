@@ -28,8 +28,23 @@ nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);b
 nav button{flex:1;background:none;color:var(--mu);border-radius:0;margin:0;padding:14px 4px}
 nav button.on{color:var(--ac);font-weight:700}
 label{display:block;margin:10px 0 4px}
+.card{border-radius:18px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.hero{background:linear-gradient(135deg,#2f5bea,#5a3fd1);color:#fff}
+.hero .mu{color:rgba(255,255,255,.8)}
+.macros{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.macros div{background:rgba(255,255,255,.16);border-radius:12px;padding:8px;text-align:center;font-size:13px}
+.macros b{display:block;font-size:20px}
+button{transition:transform .1s}button:active{transform:scale(.95)}
+.pop{animation:pop .6s ease}
+@keyframes pop{0%{transform:scale(1)}35%{transform:scale(1.15)}100%{transform:scale(1)}}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 80px);transform:translate(-50%,20px);background:#1f9d55;color:#fff;padding:12px 18px;border-radius:14px;opacity:0;pointer-events:none;transition:.3s;z-index:9;max-width:90%;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+.ok{color:#1f9d55;font-weight:700}
+.ex{display:flex;gap:12px;align-items:center}
+.ex svg{width:72px;height:72px;flex:none;background:var(--bg);border-radius:14px;color:var(--ac)}
+a{color:var(--ac)}
 </style></head><body><main id="v"></main>
-<nav><button data-t="today">Сегодня</button><button data-t="train">Тренировка</button><button data-t="prog">Прогресс</button><button data-t="prof">Профиль</button></nav>
+<div id="toast"></div><nav><button data-t="today">Сегодня</button><button data-t="train">Тренировка</button><button data-t="prog">Прогресс</button><button data-t="prof">Профиль</button></nav>
 <script>
 /* ---------- Данные (хранятся на устройстве в localStorage) ---------- */
 const K='fit1';
@@ -64,38 +79,65 @@ const phase=w=>w<=4?'адаптация, RPE 6–7':w<12?'прогрессия, 
 const e1rm=(w,r)=>Math.round(w*(1+r/30));                              // формула Эпли
 function last(n){for(let i=S.ss.length-1;i>=0;i--)if(S.ss[i].ex[n])return S.ss[i].ex[n];return null}
 function hint(n,rg){
-  const l=last(n);
-  if(!l)return 'Первый раз: начни с лёгкого веса (RPE 6–7).';
+  const l=last(n),sec=n.includes('секунд');
+  if(!l)return 'Первый раз: начни с лёгкого уровня (RPE 6–7).';
   const top=+rg.split('-')[1],b=l.reduce((a,x)=>x.w>a.w?x:a,l[0]);
-  const up=l.every(x=>x.r>=top)&&b.w>0;
-  return 'Прошлый раз: '+l.map(x=>x.w+'×'+x.r).join(', ')+(b.w>0?' (1ПМ ≈ '+e1rm(b.w,b.r)+' кг)':'')+'. '+
-    (up?'Все подходы на верхней границе — добавь 2,5 кг.':'Цель: довести все подходы до '+top+' повторов.');
+  const up=l.every(x=>x.r>=top)&&(sec||b.w>0);
+  return 'Прошлый раз: '+l.map(x=>sec?x.r+' с':x.w+'×'+x.r).join(', ')+(!sec&&b.w>0?' (1ПМ ≈ '+e1rm(b.w,b.r)+' кг)':'')+'. '+
+    (up?(sec?'Все подходы на максимуме — добавь 5–10 секунд.':'Все подходы на верхней границе — добавь 2,5 кг.'):'Цель: довести все подходы до '+top+(sec?' секунд.':' повторов.'));
 }
+
+/* ---------- Помощники: подсказки, рисунки упражнений ---------- */
+let flash=null;  // что показать после сохранения веса
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');navigator.vibrate&&navigator.vibrate(30);setTimeout(()=>e.classList.remove('show'),2300)}
+const kg=x=>String(x).replace('.',',');
+// Схематичные рисунки: [x головы, y головы, линии тела]
+const IMG={
+'Присед со штангой':[31,13,'M30 21L34 40L50 40L42 56M18 21L42 21'],
+'Жим штанги лёжа':[14,40,'M20 42L44 42L52 34L54 54M24 42L24 22M16 22L32 22M10 47L50 47'],
+'Тяга штанги в наклоне':[48,21,'M42 26L26 34L30 46L28 58M42 26L42 44M36 44L48 44'],
+'Жим гантелей сидя':[28,13,'M28 21L28 40L40 40L40 56M28 22L34 15L30 5M25 5L35 5'],
+'Румынская тяга':[50,31,'M44 35L24 32L26 44L26 58M44 35L44 52M38 52L50 52'],
+'Планка (секунды)':[52,37,'M8 50L46 40L46 52L56 52M4 55L60 55'],
+'Становая тяга':[48,22,'M42 28L30 36L38 46L34 58M42 28L40 48M32 50L48 50'],
+'Жим гантелей на наклонной':[19,23,'M24 29L40 44L52 44L54 58M24 29L28 11M23 11L33 11M18 33L40 49'],
+'Тяга верхнего блока':[26,17,'M26 25L30 44L42 42L42 56M26 26L32 34L34 22M34 22L34 2M30 22L38 22'],
+'Выпады с гантелями':[30,10,'M30 18L30 36L42 38L42 56M30 36L22 50L14 56'],
+'Разведение гантелей в стороны':[32,10,'M32 18L32 38L26 56M32 38L38 56M32 20L12 24M32 20L52 24M12 20L12 28M52 20L52 28'],
+'Скручивания':[56,34,'M4 57L60 57M40 52L52 40M40 52L32 36L22 52']
+};
+const fig=n=>IMG[n]?`<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="${IMG[n][0]}" cy="${IMG[n][1]}" r="5" fill="currentColor" stroke="none"/><path d="${IMG[n][2]}"/></svg>`:'';
+const link=n=>'https://www.youtube.com/results?search_query='+encodeURIComponent(n+' техника выполнения');
 
 /* ---------- Экраны ---------- */
 function vToday(){
-  const c=calc(),wk=wkNum();
+  const c=calc(),wk=wkNum(),td=S.ws.find(x=>x.d===T()),f=flash;flash=null;
+  const d=f?f.to-f.from:0;
   return `<h1>Сегодня</h1>
-  <div class=card><div class=mu>Цель на день</div><div class=big>${c.kcal} ккал</div>
-  <div class=row><span>Белки ${c.p} г</span><span>Жиры ${c.f} г</span><span>Углеводы ${c.c} г</span></div>
-  <div class=mu>Расход около ${c.tdee} ккал, дефицит ${S.p.def}%</div></div>
-  <div class=card><div class=mu>Вес сегодня, кг</div><div class=row><input id=wi inputmode=decimal placeholder="${curW()}"><button onclick="addW()">Сохранить</button></div></div>
+  <div class="card hero"><div class=mu>Цель на день</div><div class="big ${f?'pop':''}">${c.kcal} ккал</div>
+  ${d?`<div>Было ${f.from}, стало ${f.to} (${d>0?'+':''}${d})</div>`:''}
+  <div class=macros><div><b>${c.p} г</b>белки</div><div><b>${c.f} г</b>жиры</div><div><b>${c.c} г</b>углеводы</div></div>
+  <div class=mu style="margin-top:8px">Расход около ${c.tdee} ккал, дефицит ${S.p.def}%</div></div>
+  <div class=card><div class=mu>Вес сегодня, кг</div>
+  ${td?`<div class="big ok ${f?'pop':''}">✓ ${kg(td.w)} кг</div><div class=mu>Записано. Можно исправить:</div>`:''}
+  <div class=row><input id=wi inputmode=decimal placeholder="${kg(curW())}"><button onclick="addW()">${td?'Обновить':'Сохранить'}</button></div></div>
   <div class=card><div class=mu>Неделя ${wk} из 12, ${phase(wk)}</div><div class=big>Тренировка ${nextType()}</div><button onclick="tab('train')">Открыть</button></div>`;
 }
 function addW(){
   const w=num($('#wi').value);
   if(!(w>=40&&w<=250))return alert('Введи вес от 40 до 250 кг');
+  const from=calc().kcal;
   S.ws=S.ws.filter(x=>x.d!==T());S.ws.push({d:T(),w});S.ws.sort((a,b)=>a.d<b.d?-1:1);
-  save();tab('today');
+  save();flash={from,to:calc().kcal};tab('today');toast('Вес '+kg(w)+' кг сохранён');
 }
 function vTrain(){
   const t=nextType(),wk=wkNum();
   let h=`<h1>Тренировка ${t}</h1><div class=mu>Неделя ${wk}: ${phase(wk)}</div>
   <div class=card>Таймер отдыха <button onclick="rest(60)">60</button><button onclick="rest(90)">90</button><button onclick="rest(120)">120</button><button onclick="rest(180)">180</button> <b id=tt></b></div>`;
   P[t].forEach((e,i)=>{
-    const n=wk===12?Math.min(e[1],2):e[1],l=last(e[0]);
-    h+=`<div class=card data-i=${i}><b>${e[0]}</b><div class=mu>${n}×${e[2]}, отдых ${e[3]} с</div><div class=mu>${hint(e[0],e[2])}</div>`;
-    for(let s=0;s<n;s++)h+=`<div class=set><span class=mu>${s+1}</span><input inputmode=decimal placeholder="кг" value="${l&&l[s]&&l[s].w?l[s].w:''}"><input inputmode=numeric placeholder="повторы"><input inputmode=decimal placeholder="RPE"></div>`;
+    const n=wk===12?Math.min(e[1],2):e[1],l=last(e[0]),sec=e[0].includes('секунд');
+    h+=`<div class=card data-i=${i}><div class=ex>${fig(e[0])}<div><b>${e[0]}</b><div class=mu>${n}×${e[2]}${sec?' сек':''}, отдых ${e[3]} с</div><a href="${link(e[0])}" target=_blank rel=noopener>Видео с техникой</a></div></div><div class=mu style="margin-top:8px">${hint(e[0],e[2])}</div>`;
+    for(let s=0;s<n;s++)h+=`<div class=set><span class=mu>${s+1}</span><input inputmode=decimal placeholder="кг" ${sec?'hidden':''} value="${!sec&&l&&l[s]&&l[s].w?l[s].w:''}"><input inputmode=numeric placeholder="${sec?'секунды':'повторы'}"><input inputmode=decimal placeholder="RPE"></div>`;
     h+='</div>';
   });
   return h+'<button class=pri onclick="finish()">Завершить тренировку</button>'+hist();
@@ -111,7 +153,7 @@ function finish(){
     if(sets.length)ex[P[t][c.dataset.i][0]]=sets;
   });
   if(!Object.keys(ex).length)return alert('Заполни повторы хотя бы в одном подходе');
-  S.ss.push({d:T(),t,ex});save();tab('train');
+  S.ss.push({d:T(),t,ex});save();tab('train');toast('Тренировка '+t+' сохранена');
 }
 function hist(){
   if(!S.ss.length)return '';
