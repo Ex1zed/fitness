@@ -48,6 +48,10 @@ nav{position:fixed;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0
 nav button{flex:1;background:none;color:var(--mu);border-radius:20px;margin:0;padding:8px 2px;font-size:11px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:3px}
 nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{background:var(--ac);color:#111;font-weight:700}
+.ph{position:relative;width:112px;height:75px;flex:none;border-radius:14px;overflow:hidden;background:#24261f}
+.ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ph img+img{animation:fl 2.4s ease-in-out infinite}
+@keyframes fl{0%,35%{opacity:0}50%,85%{opacity:1}100%{opacity:0}}
 </style></head><body><main id="v"></main>
 <div id="toast"></div><nav><button data-t="today"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg><span>Сегодня</span></button><button data-t="train"><svg viewBox="0 0 24 24"><path d="M6 7v10M3 10v4M18 7v10M21 10v4M6 12h12"/></svg><span>Тренировка</span></button><button data-t="prog"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V4M16 20v-7M22 20H2"/></svg><span>Прогресс</span></button><button data-t="prof"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span>Профиль</span></button></nav>
 <script>
@@ -111,7 +115,8 @@ const IMG={
 'Разведение гантелей в стороны':[32,10,'M32 18L32 38L26 56M32 38L38 56M32 20L12 24M32 20L52 24M12 20L12 28M52 20L52 28'],
 'Скручивания':[56,34,'M4 57L60 57M40 52L52 40M40 52L32 36L22 52']
 };
-const fig=n=>IMG[n]?`<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="${IMG[n][0]}" cy="${IMG[n][1]}" r="5" fill="currentColor" stroke="none"/><path d="${IMG[n][2]}"/></svg>`:'';
+const PH={"Присед со штангой": "barbell_full_squat", "Жим штанги лёжа": "barbell_bench_press___medium_grip", "Тяга штанги в наклоне": "bent_over_barbell_row", "Жим гантелей сидя": "dumbbell_shoulder_press", "Румынская тяга": "romanian_deadlift", "Планка (секунды)": "plank", "Становая тяга": "barbell_deadlift", "Жим гантелей на наклонной": "incline_dumbbell_press", "Тяга верхнего блока": "wide_grip_lat_pulldown", "Выпады с гантелями": "dumbbell_lunges", "Разведение гантелей в стороны": "side_lateral_raise", "Скручивания": "crunches"};  // фото из открытой базы free-exercise-db (Unlicense)
+const fig=n=>PH[n]?`<div class=ph><img src="img/${PH[n]}_0.jpg" alt=""><img src="img/${PH[n]}_1.jpg" alt=""></div>`:(IMG[n]?`<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="${IMG[n][0]}" cy="${IMG[n][1]}" r="5" fill="currentColor" stroke="none"/><path d="${IMG[n][2]}"/></svg>`:'');
 const link=n=>'https://www.youtube.com/results?search_query='+encodeURIComponent(n+' техника выполнения');
 
 // Кольцевой индикатор: p от 0 до 1, col — цвет дуги
